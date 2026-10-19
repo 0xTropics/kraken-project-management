@@ -1,10 +1,46 @@
-# Kraken
+<p align="center">
+  <img src="src/app/icon.svg" width="88" height="88" alt="Kraken logo">
+</p>
 
-Project management and billing for a solo developer running several client
-projects, with a portal where each client sees their own project and nothing
-else.
+<h1 align="center">Kraken</h1>
 
-[![CI](https://github.com/0xTropics/kraken-project-management/actions/workflows/ci.yml/badge.svg)](https://github.com/0xTropics/kraken-project-management/actions/workflows/ci.yml)
+<p align="center">
+  <b>Project management, time tracking and invoicing for solo developers, with a client portal.</b>
+</p>
+
+<p align="center">
+  Deploy your own on Vercel and Supabase. Finalized invoices are immutable at the database level.
+</p>
+
+<p align="center">
+  <a href="https://github.com/0xTropics/kraken-project-management/actions/workflows/ci.yml"><img src="https://github.com/0xTropics/kraken-project-management/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-22.13%20%E2%80%93%2024-339933?logo=nodedotjs&logoColor=white" alt="Node 22.13 to 24">
+  <img src="https://img.shields.io/badge/tests-481%20%2B%2030%20e2e-brightgreen" alt="481 tests plus 30 end-to-end tests">
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome"></a>
+</p>
+
+<p align="center"><sub>Built with</sub></p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js_16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js 16">
+  <img src="https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React 19">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Tailwind_v4-0F172A?style=for-the-badge&logo=tailwindcss&logoColor=38BDF8" alt="Tailwind CSS v4">
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Supabase-1C1C1C?style=for-the-badge&logo=supabase&logoColor=3ECF8E" alt="Supabase">
+  <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel">
+  <img src="https://img.shields.io/badge/Playwright-2EAD33?style=for-the-badge" alt="Playwright">
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#getting-started">Quick start</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#where-the-security-actually-lives">Security</a> ·
+  <a href="#deployment">Deploy</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
