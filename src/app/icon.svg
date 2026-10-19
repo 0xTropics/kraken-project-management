@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32" role="img" aria-label="Kraken">
+  <!--
+    The sidebar mark on an accent plate. Derived from KrakenMark
+    (src/components/app-shell/kraken-mark.tsx), with three changes that only
+    matter at favicon size:
+      - the accent is baked in as #2563eb, because a CSS variable does not
+        resolve in an icon file;
+      - the paths are scaled 0.83 toward centre so the plate keeps a margin;
+      - the stroke goes 1.7 -> 2, which renders ~1.3px at 16px instead of ~1.1.
+    A solid plate rather than transparent strokes: a 1.7-weight line drawing
+    disappears in a crowded tab strip, and a colour block is what the eye
+    actually finds.
+  -->
+  <rect width="24" height="24" rx="5.5" fill="#2563eb" />
+  <g fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4.32c-3.1 0-5.4 2.26-5.4 5.21 0 1.35.42 2.37 1 3.37" />
+    <path d="M12 4.32c3.1 0 5.4 2.26 5.4 5.21 0 1.35-.42 2.37-1 3.37" />
+    <path d="M7.6 12.9c-.75 1.25-1.68 1.83-2.86 1.83M16.4 12.9c.75 1.25 1.68 1.83 2.86 1.83M12 12.5v2.74c0 1.83-.91 2.99-2.41 3.49M12 15.24c0 1.83.91 2.99 2.41 3.49" />
+  </g>
+  <circle cx="9.93" cy="9.51" r="1" fill="#ffffff" />
+  <circle cx="14.07" cy="9.51" r="1" fill="#ffffff" />
+</svg>

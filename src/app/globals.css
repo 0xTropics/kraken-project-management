@@ -1,0 +1,455 @@
+@import "tailwindcss";
+
+/*
+ * Kraken design system.
+ *
+ * Two references, two jobs. Plane supplies the density and structure of the
+ * internal app: short rows, small type, hierarchy carried by weight and colour
+ * rather than size. Notion supplies the calm: warm neutral surfaces, low-alpha
+ * hairlines instead of grey borders, generous line-height on prose, and no
+ * shadow on anything that is not actually floating.
+ *
+ * The portal reuses these tokens but is deliberately quieter: larger base type,
+ * more line-height, wider gutters, fewer controls per screen.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Mono",
+    "Roboto Mono", Consolas, monospace;
+
+  /* Type scale. Every size is paired with a line-height that keeps rows on a
+     4px rhythm, so dense tables stay aligned with the icons inside them. */
+  --text-2xs: 0.6875rem;      /* 11px  — table headers, keyboard hints */
+  --text-2xs--line-height: 1rem;
+  --text-2xs--letter-spacing: 0.02em;
+  --text-xs: 0.75rem;         /* 12px  — metadata, badges */
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;       /* 13px  — the internal app's body size */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;      /* 14px  — form controls, list titles */
+  --text-base--line-height: 1.375rem;
+  /* 16px on 1.7 — the portal's reading size and leading.
+     Portal-only: the internal app's body stays at 13px. One size, one leading;
+     nothing on the portal overrides this. */
+  --text-md: 1rem;
+  --text-md--line-height: 1.7rem;
+  --text-lg: 1.0625rem;       /* 17px  — section headings */
+  --text-lg--line-height: 1.5rem;
+  --text-lg--letter-spacing: -0.01em;
+  --text-xl: 1.3125rem;       /* 21px  — page titles */
+  --text-xl--line-height: 1.75rem;
+  --text-xl--letter-spacing: -0.015em;
+  --text-2xl: 1.75rem;        /* 28px  — portal page titles, big numbers */
+  --text-2xl--line-height: 2.25rem;
+  --text-2xl--letter-spacing: -0.02em;
+  --text-3xl: 2.25rem;        /* 36px  — portal hero */
+  --text-3xl--line-height: 2.75rem;
+  --text-3xl--letter-spacing: -0.025em;
+
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /*
+   * Shadows are tinted #292f3d -- a desaturated blue-slate -- rather than
+   * black, so they read as ambient light instead of dirt. Nothing exceeds ~10%
+   * alpha, and the same set is used in both themes: on a dark canvas the
+   * separation comes from surface luminance and borders, not from shadow.
+   */
+  --shadow-card: 0 1px 6px -1px rgb(41 47 61 / 0.031), 0 1px 4px rgb(41 47 61 / 0.039);
+  --shadow-raised: 0 2px 4px -1px rgb(41 47 61 / 0.039), 0 4px 6px -1px rgb(41 47 61 / 0.051);
+  --shadow-menu:
+    0 10px 10px -5px rgb(41 47 61 / 0.039), 0 10px 40px -5px rgb(41 47 61 / 0.039);
+  --shadow-modal:
+    0 10px 10px -10px rgb(41 47 61 / 0.039), 0 30px 60px -12px rgb(41 47 61 / 0.102);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   Semantic surface tokens. Components only ever reference these, never a raw
+   grey, so the dark theme is a single block of overrides rather than a hundred
+   `dark:` utilities scattered through the app.
+   --------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: light;
+
+  --bg-app: #ffffff;
+  --bg-sunken: #f7f7f5;      /* Notion's warm page grey */
+  --bg-panel: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-hover: rgb(15 15 15 / 0.04);
+  --bg-active: rgb(15 15 15 / 0.07);
+  --bg-selected: rgb(37 99 235 / 0.08);
+  --bg-inset: #f1f1ef;
+
+  --border-subtle: rgb(15 15 15 / 0.08);
+  --border-default: rgb(15 15 15 / 0.13);
+  --border-strong: rgb(15 15 15 / 0.24);
+
+  --text-primary: #37352f;   /* Notion's near-black warm ink */
+  --text-secondary: #6b6b64;
+  --text-tertiary: #6b6a64;
+  --text-inverted: #ffffff;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text: #2560d4;
+  --accent-subtle: rgb(37 99 235 / 0.1);
+  --accent-ring: rgb(37 99 235 / 0.35);
+  --accent-on: #ffffff;
+
+  /*
+   * Light-mode status colours are set at the value that clears AA as TEXT on
+   * every light surface, because that is overwhelmingly how they are used --
+   * a "-0.5h" figure, an error line, a status label. They double as fills for
+   * 6px dots and small bars, where a graphical object needs only 3:1 and the
+   * deeper shade reads no differently. The `-subtle` tints keep the original,
+   * brighter hue so the backgrounds do not turn muddy.
+   */
+  --success: #15703c;
+  --success-subtle: rgb(31 138 76 / 0.12);
+  --success-text: #15703c;
+  --warning: #8a5a12;
+  --warning-subtle: rgb(183 121 31 / 0.14);
+  --warning-text: #8a5a12;
+  --danger: #b32b22;
+  --danger-subtle: rgb(197 53 43 / 0.11);
+  --danger-text: #b32b22;
+  --danger-on: #ffffff;
+  --info: #1d4ed8;
+  --info-subtle: rgb(37 99 235 / 0.1);
+  --info-text: #1d4ed8;
+
+  /*
+   * Priority is categorical, not semantic, so it gets its own ramp and does not
+   * flip between themes -- a "high" chip must stay recognisably the same colour
+   * whichever theme the reader is in.
+   */
+  --priority-high: #ce433c;
+  --priority-medium: #e9b035;
+  --priority-low: #848d92;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bg-app: #191919;         /* Notion dark page */
+  --bg-sunken: #141414;
+  --bg-panel: #202020;
+  --bg-raised: #252525;
+  --bg-hover: rgb(255 255 255 / 0.055);
+  --bg-active: rgb(255 255 255 / 0.09);
+  --bg-selected: rgb(90 145 255 / 0.16);
+  --bg-inset: #1c1c1c;
+
+  --border-subtle: rgb(255 255 255 / 0.075);
+  --border-default: rgb(255 255 255 / 0.12);
+  --border-strong: rgb(255 255 255 / 0.24);
+
+  --text-primary: #e9e9e7;
+  --text-secondary: #9b9b96;
+  /* Sized against the lightest surface it lands on -- an active row at
+     #333 -- not just the page background, so a hovered row stays AA. */
+  --text-tertiary: #9c9c96;
+  --text-inverted: #191919;
+
+  --accent: #5a91ff;
+  --accent-hover: #6d9dff;
+  --accent-text: #7fabff;
+  --accent-subtle: rgb(90 145 255 / 0.16);
+  --accent-ring: rgb(90 145 255 / 0.45);
+  --accent-on: #10131a;
+
+  --success: #4ec07d;
+  --success-subtle: rgb(78 192 125 / 0.16);
+  --success-text: #4ec07d;
+  --warning: #e0a63e;
+  --warning-subtle: rgb(224 166 62 / 0.16);
+  --warning-text: #e0a63e;
+  --danger: #ff6b5e;
+  --danger-subtle: rgb(255 107 94 / 0.15);
+  --danger-text: #ff6b5e;
+  --danger-on: #10131a;
+  --info: #5a91ff;
+  --info-subtle: rgb(90 145 255 / 0.16);
+  --info-text: #5a91ff;
+}
+
+/* Expose the semantic tokens to Tailwind's utility generator. */
+@theme inline {
+  --color-app: var(--bg-app);
+  --color-sunken: var(--bg-sunken);
+  --color-panel: var(--bg-panel);
+  --color-raised: var(--bg-raised);
+  --color-hover: var(--bg-hover);
+  --color-active: var(--bg-active);
+  --color-selected: var(--bg-selected);
+  --color-inset: var(--bg-inset);
+
+  --color-subtle: var(--border-subtle);
+  --color-line: var(--border-default);
+  --color-strong: var(--border-strong);
+
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-secondary);
+  --color-faint: var(--text-tertiary);
+  --color-inverted: var(--text-inverted);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-on: var(--accent-on);
+
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-text: var(--warning-text);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-danger-text: var(--danger-text);
+  --color-danger-on: var(--danger-on);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-text: var(--info-text);
+
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+}
+
+/* ---------------------------------------------------------------------------
+   Base layer
+   --------------------------------------------------------------------------- */
+
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Numbers in tables must line up column to column. */
+  .tabular,
+  table td,
+  table th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--accent-subtle);
+  }
+
+  /* One focus treatment for the whole product: a 2px accent ring, only for
+     keyboard users, never a browser default outline. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: var(--radius-sm);
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  /* Hide the spinner on number inputs -- the time form uses them heavily and
+     the stepper arrows make a 44px touch target impossible on mobile. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Scrollbars: visible enough to grab, invisible enough not to draw the eye. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border-default);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--border-strong);
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Long-form markdown, used by notes and the portal's update feed. */
+  .prose-kraken {
+    color: var(--text-primary);
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+  }
+  .prose-kraken > * + * {
+    margin-top: 0.75em;
+  }
+  .prose-kraken h1,
+  .prose-kraken h2,
+  .prose-kraken h3 {
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin-top: 1.75em;
+    margin-bottom: 0.4em;
+    line-height: 1.3;
+  }
+  .prose-kraken h1 { font-size: 1.5em; }
+  .prose-kraken h2 { font-size: 1.25em; }
+  .prose-kraken h3 { font-size: 1.06em; }
+  .prose-kraken ul,
+  .prose-kraken ol {
+    padding-left: 1.5em;
+  }
+  .prose-kraken ul { list-style: disc; }
+  .prose-kraken ol { list-style: decimal; }
+  .prose-kraken li { margin-top: 0.25em; }
+  .prose-kraken li::marker { color: var(--text-tertiary); }
+  .prose-kraken a {
+    color: var(--accent-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent);
+  }
+  .prose-kraken a:hover {
+    text-decoration-color: var(--accent-text);
+  }
+  .prose-kraken code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: 0.1em 0.34em;
+  }
+  .prose-kraken pre {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    line-height: 1.6;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.85em 1em;
+    overflow-x: auto;
+  }
+  .prose-kraken pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+  .prose-kraken blockquote {
+    border-left: 3px solid var(--border-default);
+    padding-left: 0.9em;
+    color: var(--text-secondary);
+  }
+  .prose-kraken hr {
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+    margin: 1.75em 0;
+  }
+  .prose-kraken strong { font-weight: 600; }
+
+  /* Skeletons. A shimmer rather than a spinner, so a loading list keeps the
+     shape of the list it is about to become. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-hover) 25%,
+      var(--bg-active) 37%,
+      var(--bg-hover) 63%
+    );
+    background-size: 400% 100%;
+    animation: skeleton-sweep 1.4s ease infinite;
+    border-radius: var(--radius-sm);
+  }
+  @keyframes skeleton-sweep {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
+  }
+}
+
+@layer components {
+  /*
+   * Reserved outline: always rendered, transparent until needed, so a card does
+   * not move when it gains a selection or focus ring.
+   */
+  .reserve-outline {
+    outline: 0.5px solid transparent;
+    outline-offset: 0;
+  }
+}
+
+@keyframes kraken-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes kraken-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes kraken-slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}

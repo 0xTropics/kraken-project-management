@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Kraken does not work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. If it is a security problem, please do not file it here: use the private report link on the issue chooser instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you see? Include the error message or a screenshot if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest route from a fresh `npm run db:seed` (or a clean deployment) to the problem.
+      placeholder: |
+        1. Sign in
+        2. Open a project
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where are you running Kraken?
+      description: The local harness (KRAKEN_AUTH_MODE=local) is for development and tests. A deployment is Vercel + Supabase.
+      options:
+        - local harness
+        - Vercel + Supabase
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: The output of `node --version`.
+      placeholder: v24.0.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and browser
+      placeholder: macOS 15, Safari 18
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or console output
+      description: Anything from the terminal, the browser console or the Vercel logs. Remove secrets and client details first.
+      render: shell

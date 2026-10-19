@@ -1,0 +1,62 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Kraken
+.env.local
+.env*.local
+.pgdata/
+.storage/
+# Written by the test suite (KRAKEN_LOCAL_STORAGE_DIR in test/setup/setup-file.ts).
+.storage-test/
+/test-results/
+/playwright-report/
+/screenshots/
+/docs/evidence/
+.claude/settings.local.json
+.private-terms
+
+# git worktrees for isolated feature work
+/.worktrees/
+
+# Local tooling scratch. Never committed.
+/.superpowers/
