@@ -5,7 +5,7 @@
 <h1 align="center">Kraken</h1>
 
 <p align="center">
-  <b>Project management, time tracking and invoicing for solo developers, with a client portal.</b>
+  <b>Project management, time tracking and invoicing for solo operators, with a client portal.</b>
 </p>
 
 <p align="center">

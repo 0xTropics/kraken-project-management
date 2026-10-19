@@ -1,7 +1,7 @@
 {
   "name": "kraken",
   "version": "1.0.0",
-  "description": "Project management, time tracking and invoicing for solo developers, with a client portal.",
+  "description": "Project management, time tracking and invoicing for solo operators, with a client portal.",
   "license": "MIT",
   "repository": {
     "type": "git",
