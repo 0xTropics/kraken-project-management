@@ -5,25 +5,19 @@ import { Eye, EyeOff, Shuffle } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 
-/** Two words and a number, the same shape as the seeded portal passwords. */
-const WORDS = [
-  "seagrass", "lantern", "harbour", "quartz", "meadow", "cobalt", "thistle",
-  "marble", "tundra", "willow", "cinder", "pelican", "juniper", "anchor",
-  "zephyr", "basalt", "orchard", "kestrel", "saffron", "driftwood",
-];
+/** No 0, o, 1, i or l: clients read the password off a message and type it. */
+const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
 
-function passphrase(): string {
-  const values = new Uint32Array(3);
-  crypto.getRandomValues(values);
-  const first = WORDS[values[0] % WORDS.length];
-  let second = WORDS[values[1] % WORDS.length];
-  if (second === first) second = WORDS[(values[1] + 1) % WORDS.length];
-  return `${first}-${second}-${10 + (values[2] % 90)}`;
+/** Three groups of four, like `k7fq-m2xp-9wtd`: 31^12 values, about 59 bits. */
+export function generatePortalPassword(): string {
+  const values = crypto.getRandomValues(new Uint32Array(12));
+  const chars = Array.from(values, (value) => ALPHABET[value % ALPHABET.length]).join("");
+  return `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8)}`;
 }
 
 /**
  * A new portal password: masked until revealed, and Generate fills a
- * passphrase and reveals it. Reveal state is local, so it resets whenever the
+ * password and reveals it. Reveal state is local, so it resets whenever the
  * input unmounts (the rotate dialog closing). `compact` is the icon-only
  * Generate the rotate dialog uses.
  */
@@ -45,7 +39,7 @@ export function PortalPasswordInput({
   const [revealed, setRevealed] = React.useState(false);
 
   function generate() {
-    onChange(passphrase());
+    onChange(generatePortalPassword());
     setRevealed(true);
   }
 
