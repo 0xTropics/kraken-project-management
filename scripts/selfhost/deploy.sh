@@ -15,22 +15,39 @@ git -C "$repo" fetch origin main
 sha=$(git -C "$repo" rev-parse origin/main)
 rel="$releases/$sha"
 
-previous=""
+# Releases are identified by sha (the directory name), never by comparing path
+# strings: KRAKEN_HOME may be spelled differently from how the link was made.
+prev_sha=""
 if [ -L "$current" ]; then
-  previous=$(readlink "$current")
+  prev_sha=$(basename "$(readlink "$current")")
 fi
-if [ "$previous" = "$rel" ]; then
+if [ "$prev_sha" = "$sha" ]; then
   echo "Already deployed $sha"
   exit 0
 fi
 
+# Where current physically resolves; nothing that is the same place gets deleted.
+live=""
+if [ -d "$current" ]; then
+  live=$(cd -P "$current" && pwd -P)
+fi
+is_live() {
+  [ -n "$live" ] && [ -d "$1" ] && [ "$(cd -P "$1" && pwd -P)" = "$live" ]
+}
+
 # Builds record absolute paths, so the release is built where it will live.
 fail() {
   echo "deploy failed: $1; $sha removed, current unchanged" >&2
-  rm -rf "$rel"
+  if ! is_live "$rel"; then
+    rm -rf "$rel"
+  fi
   exit 1
 }
 
+if is_live "$rel"; then
+  echo "refusing to rebuild $sha: it is the live release (current resolves to it)" >&2
+  exit 1
+fi
 rm -rf "$rel"
 mkdir -p "$rel"
 if ! { git -C "$repo" archive "$sha" | tar -x -C "$rel"; }; then
@@ -55,7 +72,8 @@ launchctl kickstart -k "$KRAKEN_SERVICE"
 
 for dir in "$releases"/*; do
   [ -d "$dir" ] || continue
-  if [ "$dir" != "$rel" ] && [ "$dir" != "$previous" ]; then
+  name=$(basename "$dir")
+  if [ "$name" != "$sha" ] && [ "$name" != "$prev_sha" ] && ! is_live "$dir"; then
     rm -rf "$dir"
   fi
 done

@@ -302,6 +302,57 @@ describe("deploy.sh", () => {
     expect(box.current()).toBe(box.rel(box.first));
   });
 
+  it("redeploying the same sha with a trailing-slash KRAKEN_HOME exits 0, runs nothing, and leaves the live release intact", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    writeFileSync(box.log, "");
+
+    const r = box.run("deploy.sh", { KRAKEN_HOME: `${box.home}/` });
+    expect(r.status).toBe(0);
+    expect(box.lines()).toEqual([]);
+    expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
+    expect(box.current()).toBe(box.rel(box.first));
+  });
+
+  it("redeploying the same sha when current is a relative link exits 0, runs nothing, and leaves the live release intact", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    rmSync(path.join(box.home, "current"));
+    symlinkSync(`releases/${box.first}`, path.join(box.home, "current"));
+    writeFileSync(box.log, "");
+
+    const r = box.run("deploy.sh");
+    expect(r.status).toBe(0);
+    expect(box.lines()).toEqual([]);
+    expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
+  });
+
+  it("keeps the previous release after a second deploy with a trailing-slash KRAKEN_HOME", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    const second = box.commit();
+    expect(box.run("deploy.sh", { KRAKEN_HOME: `${box.home}/` }).status).toBe(0);
+    expect(box.releases()).toEqual([box.first, second].sort());
+    expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
+  });
+
+  it("refuses to rebuild the directory current resolves to when it is spelled differently, and changes nothing", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    // current -> alias -> releases/<sha>: the link text does not name the sha.
+    const alias = path.join(box.home, "live-alias");
+    symlinkSync(box.rel(box.first), alias);
+    rmSync(path.join(box.home, "current"));
+    symlinkSync(alias, path.join(box.home, "current"));
+    writeFileSync(box.log, "");
+
+    const r = box.run("deploy.sh");
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("live release");
+    expect(box.lines()).toEqual([]);
+    expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
+  });
+
   it("after a third deploy keeps exactly two releases, one of them current", () => {
     const box = makeDeployBox();
     expect(box.run("deploy.sh").status).toBe(0);
