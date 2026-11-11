@@ -5,6 +5,7 @@ import { Card, CardHeader, SectionLink } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listAuditLog } from "@/lib/data/audit";
 import { requireInternalPage } from "@/lib/auth/internal";
+import { assertNever } from "@/lib/billing-model";
 import { env } from "@/lib/env";
 import { formatRelative } from "@/lib/format";
 
@@ -24,6 +25,27 @@ export default async function SettingsPage() {
     { label: "Billing email", value: env.companyEmail, variable: "KRAKEN_COMPANY_EMAIL" },
     { label: "Address", value: env.companyAddress, variable: "KRAKEN_COMPANY_ADDRESS" },
   ];
+
+  let passwordNote: React.ReactNode;
+  switch (env.authMode) {
+    case "supabase":
+      passwordNote =
+        "This deployment authenticates through Supabase Auth, which owns your password. Change it there; Kraken stores no password for you in this mode.";
+      break;
+    case "local":
+      passwordNote = (
+        <>
+          Kraken stores your password on this server. To change it, run{" "}
+          <code className="rounded-[var(--radius-xs)] bg-[var(--bg-inset)] px-1.5 py-0.5 font-mono text-2xs text-[var(--text-tertiary)]">
+            npm run operator:password
+          </code>{" "}
+          on the machine that hosts Kraken.
+        </>
+      );
+      break;
+    default:
+      return assertNever(env.authMode);
+  }
 
   return (
     <div className="mx-auto max-w-[64rem] space-y-5 px-4 py-6 md:px-6">
@@ -65,10 +87,7 @@ export default async function SettingsPage() {
           description={`Signed in as ${session.email}.`}
           action={<UserCog className="size-4 text-[var(--text-tertiary)]" />}
         />
-        <p className="px-4 py-3.5 text-sm text-[var(--text-secondary)]">
-          This deployment authenticates through Supabase Auth, which owns your password. Change it
-          there; Kraken stores no password for you in this mode.
-        </p>
+        <p className="px-4 py-3.5 text-sm text-[var(--text-secondary)]">{passwordNote}</p>
       </Card>
 
       {/* Audit ------------------------------------------------------------- */}
