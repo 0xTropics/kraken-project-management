@@ -18,6 +18,7 @@
     "start": "next start --port 3100",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "operator:password": "tsx --env-file-if-exists=.env.local scripts/set-operator-password.ts",
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.ts",
     "db:reset": "node scripts/db.mjs nuke && node scripts/db.mjs start && npm run db:migrate && npm run db:seed",
