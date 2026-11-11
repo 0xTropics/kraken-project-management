@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 import process from "node:process";
 import { sql } from "@/lib/db/client";
+import { SEED_CLIENT_NAMES, assertSeedable } from "./seed-guard";
 import { hashPassword } from "@/lib/auth/password";
 import { endOfMonth, startOfMonth } from "@/lib/format";
 import { requestImagePath, storage } from "@/lib/storage";
@@ -53,6 +54,7 @@ function monthEnd(offset: number): string {
 async function main() {
   console.log("Seeding Kraken demo data ...\n");
 
+  await assertSeedable(sql);
   await resetDatabase();
 
   /* -- operator ---------------------------------------------------------- */
@@ -67,11 +69,11 @@ async function main() {
   /* -- clients ----------------------------------------------------------- */
   const clients = await sql<{ id: string; name: string }[]>`
     insert into clients (name, notes) values
-      (${"Northwind Botanicals"},
+      (${SEED_CLIENT_NAMES[0]},
        ${"Prefers a Monday call. Invoices go to accounts@, not to Priya."}),
-      (${"Meridian Freight"},
+      (${SEED_CLIENT_NAMES[1]},
        ${"Retainer since January. Slow to reply in Q3 — chase twice."}),
-      (${"Halcyon Studio"},
+      (${SEED_CLIENT_NAMES[2]},
        ${"Design-led. Send screenshots, not descriptions."})
     returning id, name
   `;
@@ -440,7 +442,7 @@ async function main() {
    */
   const [juniper] = await sql<{ id: string }[]>`
     insert into clients (name, notes)
-    values (${"Juniper Dental"}, ${"New site with online booking. Prepaid a year of maintenance."})
+    values (${SEED_CLIENT_NAMES[3]}, ${"New site with online booking. Prepaid a year of maintenance."})
     returning id
   `;
   await sql`
