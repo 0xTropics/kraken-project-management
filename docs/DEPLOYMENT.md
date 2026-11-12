@@ -244,8 +244,9 @@ KRAKEN_BACKUP_DIR=/srv/kraken/backups
 
 - `KRAKEN_LOCAL_STORAGE_DIR` must be an absolute path. A relative one resolves
   against the live release, which a deploy replaces.
-- `KRAKEN_SERVICE` is the launchd target for the app: `system/kraken.app` for a
-  LaunchDaemon, `gui/<uid>/kraken.app` for a per-user LaunchAgent.
+- `KRAKEN_SERVICE` is the launchd target for the app: `gui/<uid>/kraken.app` for
+  a per-user LaunchAgent, `system/kraken.app` for a LaunchDaemon (see
+  [launchd](#launchd)).
 - Do not set `NODE_ENV`. `deploy.sh` exports this file to `npm ci`, and
   `NODE_ENV=production` would skip the dev dependencies the build needs.
   `start.sh` sets `NODE_ENV=production` and `TZ=UTC` itself.
@@ -257,9 +258,14 @@ KRAKEN_BACKUP_DIR=/srv/kraken/backups
    `kraken.env`.
 2. `mkdir -p /srv/kraken/{storage,backups,logs}`, then
    `git clone <this repository> /srv/kraken/repo`.
-3. Write `kraken.env` and install the two launchd units below.
+3. Write `kraken.env`, copy the two launchd units from [launchd](#launchd) into
+   place, and `launchctl bootstrap` both of them (the app and the backup).
+   `kraken.app` cannot start yet, because `current` does not exist until the
+   first deploy. launchd will try to start it and retry; that is expected.
 4. Run `deploy.sh` (below). It builds the first release, applies the
-   migrations, and starts the app.
+   migrations, and restarts the app, which needs the unit from step 3 to be
+   loaded: the last step of `deploy.sh` is `launchctl kickstart`, and it fails
+   if `KRAKEN_SERVICE` is not a loaded unit.
 5. Create the operator, as the next section describes.
 
 ### The operator login
@@ -335,10 +341,54 @@ the same disk does not survive the disk.
 
 ### launchd
 
-Two units, using the labels `kraken.app` and `kraken.backup`. Put them in
-`/Library/LaunchDaemons/` (owned by root) to run at boot. A per-user
-LaunchAgent in `~/Library/LaunchAgents/` only runs while that user is logged
-in, so on a machine that is not logged in it does not start after a reboot.
+Two units, with the labels `kraken.app` (the web app) and `kraken.backup` (the
+nightly dump). There are two ways to run them. Choose one, and set
+`KRAKEN_SERVICE` in `kraken.env` to match.
+
+**(a) A per-user LaunchAgent. Recommended for one operator.** Put the plists in
+`~/Library/LaunchAgents/` and load them as the user who owns `$KRAKEN_HOME`:
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kraken.app.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kraken.backup.plist
+```
+
+Set `KRAKEN_SERVICE=gui/<uid>/kraken.app`, where `<uid>` is the output of
+`id -u`. Nothing needs sudo, so `deploy.sh` runs end to end as that user. The
+catch: a LaunchAgent only runs while that user has a login session. The machine
+must log that user in automatically at boot, or nothing starts after a reboot.
+
+**(b) A system LaunchDaemon.** Put the plists in `/Library/LaunchDaemons/`,
+owned by root, and load them with sudo:
+
+```bash
+sudo launchctl bootstrap system /Library/LaunchDaemons/kraken.app.plist
+sudo launchctl bootstrap system /Library/LaunchDaemons/kraken.backup.plist
+```
+
+Set `KRAKEN_SERVICE=system/kraken.app`. This starts at boot with nobody logged
+in. Add a `UserName` key to both plists, naming an unprivileged account (the
+examples use `kraken`), and make that account own all of `$KRAKEN_HOME`
+(`sudo chown -R kraken /srv/kraken`). Never run the app as root: a daemon with
+no `UserName` key does.
+
+```xml
+  <key>UserName</key>
+  <string>kraken</string>
+```
+
+The cost is the restart step. `launchctl kickstart` on the `system` domain
+needs root, and `deploy.sh` has no way to elevate itself. Everything it writes
+must end up owned by `kraken`, so run it as that user
+(`sudo -u kraken /srv/kraken/repo/scripts/selfhost/deploy.sh`, with
+`KRAKEN_HOME` set). Then the build, migrations and the switch of `current`
+succeed, the final `kickstart` fails, and the script exits non-zero without
+restarting the app or pruning old releases. Restart the app yourself
+afterwards with `sudo launchctl kickstart -k system/kraken.app`. If you would
+rather the deploy be one command, use (a).
+
+The plists below are for (a). For (b), add the `UserName` key shown above and
+change nothing else.
 
 The app, `kraken.app.plist`:
 
@@ -408,8 +458,9 @@ The nightly backup, `kraken.backup.plist`, at 03:00:
 ```
 
 The `PATH` in the app unit must include the directory that holds `node`; launchd
-does not read your shell profile. Load a unit with
-`launchctl bootstrap system /Library/LaunchDaemons/kraken.app.plist`.
+does not read your shell profile. Until the first deploy creates `current`, both
+units point at a script that does not exist; the backup simply does nothing
+until its 03:00 run finds it.
 
 ### Local mode and the tests
 
