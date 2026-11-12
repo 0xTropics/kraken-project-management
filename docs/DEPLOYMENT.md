@@ -324,9 +324,13 @@ untouched.
 
 If the restart fails, the deploy is half done: `current` points at the new
 release and its migrations are applied, but the app has not been restarted, so
-whatever was running before keeps running. `deploy.sh` then prints, on stderr, a message naming the
-sha and the exact command to run (`launchctl kickstart -k "<KRAKEN_SERVICE>"`),
-still removes the old releases, and exits non-zero. Run that command.
+whatever was running before keeps running. `deploy.sh` then prints, on stderr,
+a message naming the sha and the exact command to run
+(`launchctl kickstart -k "<KRAKEN_SERVICE>"`), still removes the old releases,
+and exits non-zero. Run that command, with `sudo` for a `system/` unit. If it
+fails because the unit is not loaded, `launchctl bootstrap` the unit first.
+Do not deploy again before the restart: the next deploy removes the release
+the old process is still running from.
 
 When `current` already resolves to the release for `origin/main`, the script
 prints `Already deployed <sha>` and does nothing. That includes not restarting
@@ -359,7 +363,9 @@ create databases, so run `createdb` as a Postgres superuser:
 
 ```bash
 createdb --owner=kraken kraken_restored
-pg_restore --no-owner --no-privileges --dbname=postgres://kraken:<password>@127.0.0.1:5432/kraken_restored /srv/kraken/backups/kraken-<stamp>.dump
+pg_restore --no-owner --no-privileges \
+  --dbname='postgres://kraken:CHANGE_ME@127.0.0.1:5432/kraken_restored' \
+  /srv/kraken/backups/kraken-YYYYMMDD-HHMMSS.dump
 ```
 
 A failed nightly backup is visible only in the backup unit's error log,
