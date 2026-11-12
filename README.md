@@ -143,11 +143,11 @@ Their separation is enforced by distinct JWT audiences, distinct code paths, and
 tests in `test/security/auth-boundaries.test.ts` that try to use each credential
 in the other's place.
 
-The internal row describes production. `KRAKEN_AUTH_MODE=local` swaps that one
-mechanism for an argon2id password in `internal_users` and a self-signed cookie,
-so the tests and the dev server run without a cloud project. It is a
-development harness, not a way to deploy Kraken. The portal context is
-identical in both.
+The internal row describes the Vercel deployment. `KRAKEN_AUTH_MODE=local` swaps
+that one mechanism for an argon2id password in `internal_users` and a
+self-signed cookie. The tests and the dev server run on it, and so does a
+self-hosted single machine on a private network. A feature gated on one mode is
+untested or unused in the other. The portal context is identical in both.
 
 ### Where the security actually lives
 
@@ -327,11 +327,13 @@ npm run check:a11y         # axe-core, WCAG 2.1 AA; fails on serious or critical
 
 ## Deployment
 
-Kraken deploys to Vercel, with Supabase for Postgres, Auth and Storage.
-Connect through Supabase's **session pooler**, not the transaction pooler:
+Kraken has two supported deployments: Vercel with Supabase for Postgres, Auth
+and Storage, or a single machine you own, with a local Postgres and local auth
+and storage, on a private network. For Supabase, connect through Supabase's **session pooler**, not the transaction pooler:
 postgres.js pipelines a page's concurrent queries, and transaction mode
 misroutes their results. [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) walks
-through every step, from creating the project to the first deploy.
+through every step of both, from creating the project (or the machine) to the
+first deploy.
 
 ## Project layout
 

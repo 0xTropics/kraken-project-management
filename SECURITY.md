@@ -36,8 +36,10 @@ boundary:
 Out of scope: findings that need a compromised operator account or a
 compromised Vercel or Supabase account; denial of service by volume against a
 deployment you do not own; missing hardening headers with no demonstrated
-impact; and anything that only affects `KRAKEN_AUTH_MODE=local`, which is a
-development harness and not a way to run Kraken.
+impact; and attacks on the operator login of a self-hosted deployment that is exposed
+to the public internet. A self-hosted deployment (`KRAKEN_AUTH_MODE=local`) is for a private
+network: it has no operator login throttling and is not hardened for public
+exposure, and putting a public reverse proxy in front of it is unsupported.
 
 ## Supported versions
 

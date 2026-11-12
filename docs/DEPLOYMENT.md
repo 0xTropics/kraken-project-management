@@ -1,8 +1,11 @@
 # Deploying Kraken
 
-Kraken deploys to Vercel with Supabase for Postgres, Auth, and Storage. Every
-step below needs credentials that only you have, so they are written to be run
-once, by hand, in order.
+Kraken runs in one of two supported ways: on Vercel with Supabase for
+Postgres, Auth, and Storage (§1 to §6), or on a single machine you own, with a
+local Postgres, local password auth and local file storage (see
+[Self-hosting on one machine](#self-hosting-on-one-machine)). Every step below
+needs credentials that only you have, so they are written to be run once, by
+hand, in order.
 
 Kraken needs Node 22.13 through 24.x (`.nvmrc` pins 24). Vercel reads
 `engines.node` from `package.json`, which overrides the project's Node.js
@@ -93,8 +96,8 @@ sign-up open.
 **Two things that are easy to get wrong here:**
 
 - The operator password lives in Supabase's `auth.users`. A deployed Kraken
-  never reads `internal_users.password_hash` — that column belongs to the local
-  development harness. Changing it changes nothing in production.
+  never reads `internal_users.password_hash` — that column belongs to local
+  mode. Changing it changes nothing on a Supabase deployment.
 - The allow-list is an environment variable, so **adding or changing an
   operator needs a Vercel redeploy**, not just a database write. Creating the
   Supabase user is only half the job; until its uuid is in
@@ -165,6 +168,257 @@ database: both wipe every data table and load demo data. They read
 first client and project in the app instead; creating a project sets its portal
 password, and the project's settings page rotates it.
 
+## Self-hosting on one machine
+
+This is the second supported deployment: one machine runs Postgres and Kraken,
+with `KRAKEN_AUTH_MODE=local` and `KRAKEN_STORAGE_MODE=local`. The scripts in
+`scripts/selfhost/` assume macOS with launchd; the layout and the variables
+carry over to any machine with a service manager, but `deploy.sh` calls
+`launchctl` directly.
+
+**It is for a private network.** Local mode has no operator login throttling
+(only the portal is throttled, see "Not built") and is not hardened for the
+public internet. Putting a public reverse proxy in front of it is unsupported.
+Reach it over a VPN or a LAN.
+
+### Requirements
+
+- Node 22.13 through 24.x, `git`, and Postgres with `pg_dump` and `pg_restore`
+  on the same machine, listening on localhost.
+- Postgres in UTC. The app runs with `TZ=UTC`, and some queries cast
+  timestamps to dates in the database's own time zone (revenue is bucketed on
+  `finalized_at::date`), so a database in another zone can put a date on the
+  wrong side of midnight. Set `timezone = 'UTC'` in `postgresql.conf`, or
+  `alter database kraken set timezone to 'UTC'`.
+- HTTPS in front of the app. The operator session cookie is `secure` whenever
+  `NODE_ENV=production`, which `start.sh` sets, so a browser will not send it
+  over plain `http://` and sign-in appears to succeed and then bounce back to
+  the login page. Terminate HTTPS with a reverse proxy on the private network
+  (a VPN's built-in HTTPS serving does this) and forward to
+  `127.0.0.1:3100`. `start.sh` binds the app to `127.0.0.1` only, and refuses to
+  start unless `KRAKEN_APP_URL` is `https://…` or a localhost address.
+
+### Layout
+
+Everything lives under one directory, `$KRAKEN_HOME` (the examples use
+`/srv/kraken`):
+
+```
+/srv/kraken/
+  kraken.env      configuration, mode 600 (below)
+  repo/           a git clone of this repository; deploy.sh fetches into it
+  releases/<sha>/ one built copy of the app per deployed commit
+  current         symlink to the live release
+  storage/        invoice PDFs
+  backups/        database dumps
+  logs/           service output
+```
+
+`KRAKEN_HOME` is read from the process environment, not from `kraken.env`: the
+launchd unit sets it (below), and in a shell you export it first.
+
+### `kraken.env`
+
+A shell sources this file, so quote any value that contains spaces or special
+characters. Create it with `chmod 600`.
+
+```bash
+# App
+DATABASE_URL=postgres://kraken:<password>@127.0.0.1:5432/kraken
+DATABASE_POOL_MAX=2
+KRAKEN_SESSION_SECRET=<openssl rand -base64 48>
+KRAKEN_APP_URL=https://kraken.example
+KRAKEN_AUTH_MODE=local
+KRAKEN_STORAGE_MODE=local
+KRAKEN_LOCAL_STORAGE_DIR=/srv/kraken/storage
+KRAKEN_COMPANY_NAME="Fathom Software"
+KRAKEN_COMPANY_EMAIL=billing@example.com
+KRAKEN_COMPANY_ADDRESS="Port Alder BC"
+
+# Read by the scripts
+KRAKEN_SERVICE=system/kraken.app    # launchd target deploy.sh restarts
+KRAKEN_BACKUP_DIR=/srv/kraken/backups
+#PORT=3100                          # optional, default 3100
+#PG_BIN_DIR=/opt/postgres/bin       # optional, where pg_dump lives if not on PATH
+```
+
+- `KRAKEN_LOCAL_STORAGE_DIR` must be an absolute path. A relative one resolves
+  against the live release, which a deploy replaces.
+- `KRAKEN_SERVICE` is the launchd target for the app: `system/kraken.app` for a
+  LaunchDaemon, `gui/<uid>/kraken.app` for a per-user LaunchAgent.
+- Do not set `NODE_ENV`. `deploy.sh` exports this file to `npm ci`, and
+  `NODE_ENV=production` would skip the dev dependencies the build needs.
+  `start.sh` sets `NODE_ENV=production` and `TZ=UTC` itself.
+- The Supabase variables are not used in local mode and can be left out.
+
+### First install
+
+1. Create the database and a role for it, and put the connection string in
+   `kraken.env`.
+2. `mkdir -p /srv/kraken/{storage,backups,logs}`, then
+   `git clone <this repository> /srv/kraken/repo`.
+3. Write `kraken.env` and install the two launchd units below.
+4. Run `deploy.sh` (below). It builds the first release, applies the
+   migrations, and starts the app.
+5. Create the operator, as the next section describes.
+
+### The operator login
+
+In local mode the operator is a row in `internal_users`. Nothing in a fresh
+install creates it: the demo seed does, but `npm run db:seed` must never be run
+against a real database. Insert the row once, with no password, then set the
+password. From `$KRAKEN_HOME/current`, with `kraken.env` loaded:
+
+```bash
+cd /srv/kraken/current
+set -a; . /srv/kraken/kraken.env; set +a
+psql "$DATABASE_URL" -c "insert into internal_users (email, name) values ('operator@example.com', 'Morgan Hale')"
+npm run operator:password -- operator@example.com
+```
+
+`operator:password` sets the password on an existing row, matched on email. It
+does not create a user. The password must be at least 12 characters. On a
+terminal it asks twice without echo; when its input is piped it reads one line
+from stdin. Run it again to change the password.
+
+### Deploying
+
+`deploy.sh` ships `origin/main` of the clone in `repo/`:
+
+```bash
+KRAKEN_HOME=/srv/kraken /srv/kraken/current/scripts/selfhost/deploy.sh
+```
+
+It fetches `origin/main`, exports that commit to `releases/<sha>/`, runs
+`npm ci`, `npm run build` and `npm run db:migrate` there, switches `current` to
+the new release, restarts the app with `launchctl kickstart -k "$KRAKEN_SERVICE"`,
+and keeps the new release and the previous one. A failed build or migration
+leaves `current` and the running app untouched. When nothing has changed it
+prints `Already deployed <sha>` and does nothing.
+
+For the very first deploy there is no `current` yet, so run the script from
+`repo/scripts/selfhost/deploy.sh`.
+
+Migrations run before the switch, so the same caveat as §2 applies: a migration
+that removes something the running release still reads will break it until the
+restart.
+
+### Backups
+
+`backup.sh` writes a custom-format dump of the database:
+
+```bash
+KRAKEN_HOME=/srv/kraken /srv/kraken/current/scripts/selfhost/backup.sh
+```
+
+It runs `pg_dump --format=custom --no-owner --no-privileges` into
+`$KRAKEN_BACKUP_DIR/kraken-<UTC timestamp>.dump` (mode 600) and keeps the 14
+newest dumps. It passes `DATABASE_URL` to `pg_dump` on the command line, so the
+database password is visible in `ps` to other local users of that machine. That
+is acceptable on a single-user machine; if it is not on yours, use a role
+whose password is in a `~/.pgpass` file and leave the password out of the URL.
+
+To restore, into an empty database:
+
+```bash
+createdb kraken_restored
+pg_restore --no-owner --no-privileges --dbname=postgres://kraken:<password>@127.0.0.1:5432/kraken_restored /srv/kraken/backups/kraken-<stamp>.dump
+```
+
+Invoice PDFs are not in the dump: they live in `storage/`, so back that
+directory up as well.
+
+**A file-level copy of a running Postgres data directory is not a usable
+backup.** It is not consistent, and it can look fine until the day you restore
+it. The dump is the backup. Copy the dumps off the machine too; a backup on
+the same disk does not survive the disk.
+
+### launchd
+
+Two units, using the labels `kraken.app` and `kraken.backup`. Put them in
+`/Library/LaunchDaemons/` (owned by root) to run at boot. A per-user
+LaunchAgent in `~/Library/LaunchAgents/` only runs while that user is logged
+in, so on a machine that is not logged in it does not start after a reboot.
+
+The app, `kraken.app.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kraken.app</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/srv/kraken/current/scripts/selfhost/start.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KRAKEN_HOME</key>
+    <string>/srv/kraken</string>
+    <key>PATH</key>
+    <string>/opt/node/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/srv/kraken/logs/app.log</string>
+  <key>StandardErrorPath</key>
+  <string>/srv/kraken/logs/app.err.log</string>
+</dict>
+</plist>
+```
+
+The nightly backup, `kraken.backup.plist`, at 03:00:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>kraken.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/srv/kraken/current/scripts/selfhost/backup.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KRAKEN_HOME</key>
+    <string>/srv/kraken</string>
+    <key>PATH</key>
+    <string>/opt/postgres/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/srv/kraken/logs/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/srv/kraken/logs/backup.err.log</string>
+</dict>
+</plist>
+```
+
+The `PATH` in the app unit must include the directory that holds `node`; launchd
+does not read your shell profile. Load a unit with
+`launchctl bootstrap system /Library/LaunchDaemons/kraken.app.plist`.
+
+### Local mode and the tests
+
+`npm run db:seed` refuses to run when the database holds a client the demo seed
+did not create, and `npm run db:reset` ends in `db:seed`. That guard is a
+backstop, not permission: never point either command at a database you care
+about. The tests and `npm run dev` use the same local mode, so a feature gated
+on one mode is untested or unused in the other.
+
 ## Operational notes
 
 - **Runtime.** Every route runs on the Node runtime; the Postgres driver and the
@@ -172,7 +426,8 @@ password, and the project's settings page rotates it.
   `next.config.ts` keeps them out of the bundle.
 - **Backups.** Supabase takes daily backups on paid plans. Invoices are the data
   you cannot reconstruct — check that backups are on before issuing the first
-  one.
+  one. On a self-hosted machine the backups are yours to take; see
+  [Backups](#backups) in the self-hosting section.
 - **Rotating a portal password** bumps `portal_password_version`, which
   invalidates that project's live sessions immediately.
 

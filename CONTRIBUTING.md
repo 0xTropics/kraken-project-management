@@ -27,25 +27,26 @@ Next.js 16 has breaking changes from earlier versions. When in doubt about an
 API, read the guide for the installed version in `node_modules/next/dist/docs/`
 rather than relying on memory.
 
-## There is one deployment, and it is Vercel + Supabase
+## There are two deployments
 
-Kraken runs in production on Vercel with Supabase for Postgres, Auth and
-Storage, using `KRAKEN_AUTH_MODE=supabase` and `KRAKEN_STORAGE_MODE=supabase`.
-That is the product.
+Kraken runs on Vercel with Supabase for Postgres, Auth and Storage, using
+`KRAKEN_AUTH_MODE=supabase` and `KRAKEN_STORAGE_MODE=supabase`. It also runs on
+a single machine you own, on a private network, with `local` for both
+(`docs/DEPLOYMENT.md`, "Self-hosting on one machine").
 
-`local` mode is a **test and development harness, not a deployment option**. It
-is what `npm test`, `npm run dev`, the Playwright suite and the `check:*` scripts
-run against, because they need a Postgres on `localhost` and no cloud project.
-Please do not delete it, and do not document it as a way to run Kraken.
+`local` mode is also what `npm test`, `npm run dev`, the Playwright suite and
+the `check:*` scripts run against, because they need a Postgres on `localhost`
+and no cloud project. Please do not delete it. Never point `npm run db:seed` or
+`npm run db:reset` at a database you care about.
 
 The consequence to keep in mind:
 
-- A feature gated on `env.authMode === "local"` is dead code in production.
+- A feature gated on `env.authMode === "local"` does nothing on the Vercel
+  deployment, and one gated on `supabase` does nothing on a self-hosted machine.
 - A feature gated on `supabase` has no test covering it.
 - When you touch identity, files or sessions, the local path is the one the
-  tests prove and the supabase path is the one that ships. A green
-  `npm run verify` says nothing about the second, so say in your pull request how
-  you checked it.
+  tests prove. A green `npm run verify` says nothing about the supabase path,
+  so say in your pull request how you checked it.
 
 ## Stack facts
 

@@ -34,9 +34,10 @@ body:
     id: environment
     attributes:
       label: Where are you running Kraken?
-      description: The local harness (KRAKEN_AUTH_MODE=local) is for development and tests. A deployment is Vercel + Supabase.
+      description: Local mode (KRAKEN_AUTH_MODE=local) is used for development, tests and self-hosting on one machine.
       options:
         - local harness
+        - self-hosted (local modes)
         - Vercel + Supabase
     validations:
       required: true

@@ -5,10 +5,10 @@
  * files live. The database, the API, and the portal behave identically in
  * both.
  *
- * `supabase` is the deployed product; `local` is the test and development
- * harness that lets the suite and the dev server run with no cloud project.
- * Local is not a deployment option, so anything gated on it is dead code in
- * production -- and anything gated on `supabase` has no test covering it.
+ * `supabase` is the Vercel deployment; `local` runs the tests and the dev
+ * server with no cloud project, and is also what a self-hosted single machine
+ * uses (docs/DEPLOYMENT.md). A feature gated on one mode is untested or unused
+ * in the other.
  *
  *   KRAKEN_AUTH_MODE=supabase   Supabase Auth issues the internal session, and
  *                               KRAKEN_INTERNAL_USER_IDS decides who is let in.
@@ -16,10 +16,12 @@
  *                               internal_users.password_hash is unused here.
  *   KRAKEN_AUTH_MODE=local      Kraken verifies an argon2id password against
  *                               internal_users and signs its own cookie. For
- *                               development on a machine with no cloud project.
+ *                               development, tests and a self-hosted machine
+ *                               on a private network.
  *
  *   KRAKEN_STORAGE_MODE=supabase  Invoice PDFs live in a private Storage bucket.
- *   KRAKEN_STORAGE_MODE=local     Invoice PDFs live under .storage/, served
+ *   KRAKEN_STORAGE_MODE=local     Invoice PDFs live under KRAKEN_LOCAL_STORAGE_DIR
+ *                                 (default .storage/), served
  *                                 through the same short-lived signed-URL API.
  */
 
