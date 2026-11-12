@@ -13,6 +13,10 @@ current="$KRAKEN_HOME/current"
 
 git -C "$repo" fetch origin main
 sha=$(git -C "$repo" rev-parse origin/main)
+if [ -z "$sha" ]; then
+  echo "deploy failed: origin/main did not resolve to a commit; nothing changed" >&2
+  exit 1
+fi
 rel="$releases/$sha"
 
 # Releases are identified by sha (the directory name), never by comparing path
@@ -21,7 +25,8 @@ prev_sha=""
 if [ -L "$current" ]; then
   prev_sha=$(basename "$(readlink "$current")")
 fi
-if [ "$prev_sha" = "$sha" ]; then
+# Only when current resolves to a directory: a dangling link is rebuilt.
+if [ "$prev_sha" = "$sha" ] && [ -d "$current" ]; then
   echo "Already deployed $sha"
   exit 0
 fi
@@ -50,10 +55,10 @@ if is_live "$rel"; then
 fi
 rm -rf "$rel"
 mkdir -p "$rel"
-if ! { git -C "$repo" archive "$sha" | tar -x -C "$rel"; }; then
+if ! { git -C "$repo" archive "$sha" | tar -x -f - -C "$rel"; }; then
   fail "export"
 fi
-for step in "npm ci" "npm run build" "npm run db:migrate"; do
+for step in "npm ci --include=dev" "npm run build" "npm run db:migrate"; do
   # shellcheck disable=SC2086
   if ! (cd "$rel" && $step); then
     fail "$step"
@@ -68,7 +73,13 @@ else
   mv -fT "$KRAKEN_HOME/current.tmp" "$current"
 fi
 
-launchctl kickstart -k "$KRAKEN_SERVICE"
+# A failed restart is reported, not fatal yet: current has already moved and the
+# migrations are applied, so the old releases are still pruned before exiting.
+restarted=1
+if ! launchctl kickstart -k "$KRAKEN_SERVICE"; then
+  restarted=0
+  echo "deploy incomplete: current now points at $sha and its migrations are applied, but the app was NOT restarted. Restart it with: launchctl kickstart -k \"$KRAKEN_SERVICE\"" >&2
+fi
 
 for dir in "$releases"/*; do
   [ -d "$dir" ] || continue
@@ -77,4 +88,7 @@ for dir in "$releases"/*; do
     rm -rf "$dir"
   fi
 done
+if [ "$restarted" -ne 1 ]; then
+  exit 1
+fi
 echo "Deployed $sha"

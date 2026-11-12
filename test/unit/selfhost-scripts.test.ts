@@ -41,8 +41,10 @@ case "$name" in
     file=""
     for a in "$@"; do case "$a" in --file=*) file="\${a#--file=}" ;; esac; done
     if [ -n "$file" ]; then
-      if [ "\${STUB_FAIL:-}" = "pg_dump" ]; then echo "partial" > "$file"; else echo "dump" > "$file"; fi
+      if [ "\${STUB_FAIL:-}" = "pg_dump" ] || [ -n "\${STUB_KILL_PARENT:-}" ]; then echo "partial" > "$file"; else echo "dump" > "$file"; fi
     fi
+    # Simulates the service manager stopping the backup mid-dump.
+    if [ -n "\${STUB_KILL_PARENT:-}" ]; then kill -TERM "$PPID"; fi
     ;;
 esac
 if [ "\${STUB_FAIL:-}" = "$line" ] || [ "\${STUB_FAIL:-}" = "$name" ]; then exit 1; fi
@@ -239,11 +241,16 @@ describe("start.sh", () => {
 });
 
 describe("deploy.sh", () => {
-  it("runs npm ci, build, db:migrate in that order, points current at the new sha, then kickstarts KRAKEN_SERVICE", () => {
+  it("runs npm ci --include=dev, build, db:migrate in that order, points current at the new sha, then kickstarts KRAKEN_SERVICE", () => {
     const box = makeDeployBox();
     const r = box.run("deploy.sh");
     expect(r.status).toBe(0);
-    expect(box.lines()).toEqual(["npm ci", "npm run build", "npm run db:migrate", `launchctl kickstart -k ${SERVICE}`]);
+    expect(box.lines()).toEqual([
+      "npm ci --include=dev",
+      "npm run build",
+      "npm run db:migrate",
+      `launchctl kickstart -k ${SERVICE}`,
+    ]);
     expect(box.current()).toBe(box.rel(box.first));
     // current already pointed at the new release when the service was kicked.
     expect(box.side("kick")).toEqual([box.rel(box.first)]);
@@ -265,7 +272,7 @@ describe("deploy.sh", () => {
     expect(box.current()).toBe(box.rel(box.first));
     expect(existsSync(box.rel(second))).toBe(false);
     expect(box.releases()).toEqual([box.first]);
-    expect(box.lines()).toEqual(["npm ci", "npm run build"]);
+    expect(box.lines()).toEqual(["npm ci --include=dev", "npm run build"]);
   });
 
   it("on a failed migration: exits non-zero, current unchanged, no kickstart", () => {
@@ -278,13 +285,13 @@ describe("deploy.sh", () => {
     expect(r.status).not.toBe(0);
     expect(box.current()).toBe(box.rel(box.first));
     expect(existsSync(box.rel(second))).toBe(false);
-    expect(box.lines()).toEqual(["npm ci", "npm run build", "npm run db:migrate"]);
+    expect(box.lines()).toEqual(["npm ci --include=dev", "npm run build", "npm run db:migrate"]);
     expect(box.lines().some((l) => l.startsWith("launchctl"))).toBe(false);
   });
 
   it("on a first deploy that fails: exits non-zero and leaves no current and no release", () => {
     const box = makeDeployBox();
-    const r = box.run("deploy.sh", { STUB_FAIL: "npm ci" });
+    const r = box.run("deploy.sh", { STUB_FAIL: "npm ci --include=dev" });
     expect(r.status).not.toBe(0);
     expect(box.current()).toBeNull();
     expect(box.releases()).toEqual([]);
@@ -353,6 +360,43 @@ describe("deploy.sh", () => {
     expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
   });
 
+  it("kickstart fails: stderr names the sha and the kickstart command, current points at the new release, old releases are pruned to two, exit non-zero", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    const second = box.commit();
+    expect(box.run("deploy.sh").status).toBe(0);
+    const third = box.commit();
+
+    const r = box.run("deploy.sh", { STUB_FAIL: "launchctl" });
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain(third);
+    expect(r.stderr).toContain(`launchctl kickstart -k "${SERVICE}"`);
+    expect(r.stderr).toContain("NOT restarted");
+    expect(r.stderr).not.toContain("secret");
+    expect(r.stdout).not.toContain("Deployed");
+    expect(box.current()).toBe(box.rel(third));
+    expect(box.releases()).toEqual([second, third].sort());
+  });
+
+  it("rebuilds when current is a dangling link named after origin/main instead of claiming it is deployed", () => {
+    const box = makeDeployBox();
+    expect(box.run("deploy.sh").status).toBe(0);
+    rmSync(box.rel(box.first), { recursive: true, force: true });
+    writeFileSync(box.log, "");
+
+    const r = box.run("deploy.sh");
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain("Already deployed");
+    expect(box.lines()).toEqual([
+      "npm ci --include=dev",
+      "npm run build",
+      "npm run db:migrate",
+      `launchctl kickstart -k ${SERVICE}`,
+    ]);
+    expect(box.current()).toBe(box.rel(box.first));
+    expect(readFileSync(path.join(box.rel(box.first), "file.txt"), "utf8")).toBe("version 1\n");
+  });
+
   it("after a third deploy keeps exactly two releases, one of them current", () => {
     const box = makeDeployBox();
     expect(box.run("deploy.sh").status).toBe(0);
@@ -393,6 +437,14 @@ describe("backup.sh", () => {
     const r = box.run("backup.sh", { STUB_FAIL: "pg_dump" });
     expect(r.status).not.toBe(0);
     expect(dumps(box)).toEqual(old);
+  });
+
+  it("when killed with SIGTERM mid-dump: exits non-zero and leaves no .partial or .dump", () => {
+    const box = makeBox();
+    const r = box.run("backup.sh", { STUB_KILL_PARENT: "1" });
+    expect(r.status).not.toBe(0);
+    expect(box.lines()[0]).toContain("pg_dump");
+    expect(dumps(box)).toEqual([]);
   });
 
   it("keeps the 14 newest of 16 dumps", () => {

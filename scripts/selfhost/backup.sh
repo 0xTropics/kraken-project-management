@@ -17,6 +17,10 @@ mkdir -p "$KRAKEN_BACKUP_DIR"
 stamp=$(date -u +%Y%m%d-%H%M%S)
 final="$KRAKEN_BACKUP_DIR/kraken-$stamp.dump"
 partial="$final.partial"
+# Remove the partial however the run ends; a signal becomes an exit so the
+# EXIT trap runs. Cleared once the dump has been renamed into place.
+trap 'rm -f "$partial"' EXIT
+trap 'exit 1' HUP INT TERM
 
 if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" --dbname="$DATABASE_URL"; then
   rm -f "$partial"
@@ -24,6 +28,7 @@ if ! pg_dump --format=custom --no-owner --no-privileges --file="$partial" --dbna
   exit 1
 fi
 mv -f "$partial" "$final"
+trap - EXIT HUP INT TERM
 
 ls -1 "$KRAKEN_BACKUP_DIR" | grep '^kraken-.*\.dump$' | sort -r | awk 'NR > 14' |
   while IFS= read -r name; do
