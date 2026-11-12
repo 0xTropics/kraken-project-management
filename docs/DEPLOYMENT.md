@@ -200,8 +200,11 @@ Reach it over a VPN or a LAN.
 
 ### Layout
 
-Everything lives under one directory, `$KRAKEN_HOME` (the examples use
-`/srv/kraken`):
+Everything lives under one directory, `$KRAKEN_HOME`. The examples use
+`/srv/kraken`, but that is only an example: on macOS the root volume is
+read-only, so choose a directory under the service user's home, such as
+`~/kraken`. Write it out as an absolute path in `kraken.env` and the plists,
+which do not expand `~`.
 
 ```
 /srv/kraken/
@@ -219,14 +222,18 @@ launchd unit sets it (below), and in a shell you export it first.
 
 ### `kraken.env`
 
-A shell sources this file, so quote any value that contains spaces or special
-characters. Create it with `chmod 600`.
+A shell sources this file, so single-quote every value that is a secret or
+could contain a special character, as `DATABASE_URL` and
+`KRAKEN_SESSION_SECRET` are below. Unquoted, a `&`, `$` or space in a password
+breaks the file and can write part of the secret to the log. A value that
+itself contains a `'` cannot be single-quoted, so choose a database password
+without one. Create the file with `chmod 600`.
 
 ```bash
 # App
-DATABASE_URL=postgres://kraken:<password>@127.0.0.1:5432/kraken
+DATABASE_URL='postgres://kraken:CHANGE_ME@127.0.0.1:5432/kraken'
 DATABASE_POOL_MAX=2
-KRAKEN_SESSION_SECRET=<openssl rand -base64 48>
+KRAKEN_SESSION_SECRET='CHANGE_ME'   # replace with the output of: openssl rand -base64 48
 KRAKEN_APP_URL=https://kraken.example
 KRAKEN_AUTH_MODE=local
 KRAKEN_STORAGE_MODE=local
@@ -236,7 +243,7 @@ KRAKEN_COMPANY_EMAIL=billing@example.com
 KRAKEN_COMPANY_ADDRESS="Port Alder BC"
 
 # Read by the scripts
-KRAKEN_SERVICE=system/kraken.app    # launchd target deploy.sh restarts
+KRAKEN_SERVICE=gui/501/kraken.app   # launchd target deploy.sh restarts; 501 is `id -u`
 KRAKEN_BACKUP_DIR=/srv/kraken/backups
 #PORT=3100                          # optional, default 3100
 #PG_BIN_DIR=/opt/postgres/bin       # optional, where pg_dump lives if not on PATH
@@ -244,28 +251,33 @@ KRAKEN_BACKUP_DIR=/srv/kraken/backups
 
 - `KRAKEN_LOCAL_STORAGE_DIR` must be an absolute path. A relative one resolves
   against the live release, which a deploy replaces.
-- `KRAKEN_SERVICE` is the launchd target for the app: `gui/<uid>/kraken.app` for
-  a per-user LaunchAgent, `system/kraken.app` for a LaunchDaemon (see
+- `KRAKEN_SERVICE` is the launchd target for the app: `gui/501/kraken.app` for
+  a per-user LaunchAgent, with 501 replaced by the output of `id -u` for the
+  user that runs it, or `system/kraken.app` for a LaunchDaemon (see
   [launchd](#launchd)).
-- Do not set `NODE_ENV`. `deploy.sh` exports this file to `npm ci`, and
-  `NODE_ENV=production` would skip the dev dependencies the build needs.
-  `start.sh` sets `NODE_ENV=production` and `TZ=UTC` itself.
+- Do not set `NODE_ENV`. `start.sh` sets `NODE_ENV=production` and `TZ=UTC`
+  itself, and `deploy.sh` runs `npm ci --include=dev`, so the dev dependencies
+  the build needs are installed whatever `NODE_ENV` says.
 - The Supabase variables are not used in local mode and can be left out.
 
 ### First install
 
 1. Create the database and a role for it, and put the connection string in
-   `kraken.env`.
-2. `mkdir -p /srv/kraken/{storage,backups,logs}`, then
-   `git clone <this repository> /srv/kraken/repo`.
+   `kraken.env`. The role should not have `CREATEDB`; it only needs to own its
+   database.
+2. `mkdir -p /srv/kraken/{storage,backups,logs}`, then `chmod 700 /srv/kraken`,
+   then `git clone <this repository> /srv/kraken/repo`. Mode 700 matters: the
+   invoice files under `storage/` are otherwise readable by every account on the
+   machine.
 3. Write `kraken.env`, copy the two launchd units from [launchd](#launchd) into
    place, and `launchctl bootstrap` both of them (the app and the backup).
    `kraken.app` cannot start yet, because `current` does not exist until the
    first deploy. launchd will try to start it and retry; that is expected.
 4. Run `deploy.sh` (below). It builds the first release, applies the
-   migrations, and restarts the app, which needs the unit from step 3 to be
-   loaded: the last step of `deploy.sh` is `launchctl kickstart`, and it fails
-   if `KRAKEN_SERVICE` is not a loaded unit.
+   migrations, and restarts the app with `launchctl kickstart`, which needs the
+   unit from step 3 to be loaded. If `KRAKEN_SERVICE` is not a loaded unit, or
+   the restart is not allowed (option (b) below), the deploy prints the restart
+   command and exits non-zero; run that command.
 5. Create the operator, as the next section describes.
 
 ### The operator login
@@ -273,7 +285,10 @@ KRAKEN_BACKUP_DIR=/srv/kraken/backups
 In local mode the operator is a row in `internal_users`. Nothing in a fresh
 install creates it: the demo seed does, but `npm run db:seed` must never be run
 against a real database. Insert the row once, with no password, then set the
-password. From `$KRAKEN_HOME/current`, with `kraken.env` loaded:
+password. Run the commands below from `$KRAKEN_HOME/current`, with `kraken.env`
+loaded. `psql` must be on `PATH`; if your Postgres install is not, prepend its
+`bin` directory (`PATH="$PG_BIN_DIR:$PATH"`, with `PG_BIN_DIR` as in
+`kraken.env`):
 
 ```bash
 cd /srv/kraken/current
@@ -295,15 +310,29 @@ from stdin. Run it again to change the password.
 KRAKEN_HOME=/srv/kraken /srv/kraken/current/scripts/selfhost/deploy.sh
 ```
 
-It fetches `origin/main`, exports that commit to `releases/<sha>/`, runs
-`npm ci`, `npm run build` and `npm run db:migrate` there, switches `current` to
-the new release, restarts the app with `launchctl kickstart -k "$KRAKEN_SERVICE"`,
-and keeps the new release and the previous one. A failed build or migration
-leaves `current` and the running app untouched. When nothing has changed it
-prints `Already deployed <sha>` and does nothing.
-
-For the very first deploy there is no `current` yet, so run the script from
+Run the copy in `current/`, as above. `repo/` is only ever fetched, never
+checked out, so the copy of the script under `repo/scripts/selfhost/` is the
+one from clone time. The very first deploy has no `current` yet, so it uses
 `repo/scripts/selfhost/deploy.sh`.
+
+It fetches `origin/main`, exports that commit to `releases/<sha>/`, runs
+`npm ci --include=dev`, `npm run build` and `npm run db:migrate` there,
+switches `current` to the new release, restarts the app with
+`launchctl kickstart -k "$KRAKEN_SERVICE"`, and keeps the new release and the
+previous one. A failed build or migration leaves `current` and the running app
+untouched.
+
+If the restart fails, the deploy is half done: `current` points at the new
+release and its migrations are applied, but the app has not been restarted, so
+whatever was running before keeps running. `deploy.sh` then prints, on stderr, a message naming the
+sha and the exact command to run (`launchctl kickstart -k "<KRAKEN_SERVICE>"`),
+still removes the old releases, and exits non-zero. Run that command.
+
+When `current` already resolves to the release for `origin/main`, the script
+prints `Already deployed <sha>` and does nothing. That includes not restarting
+the app, so re-running a deploy is not a way to restart it after a failed
+restart; use the printed command. If `current` is a link to a release directory
+that no longer exists, the script rebuilds that release instead.
 
 Migrations run before the switch, so the same caveat as §2 applies: a migration
 that removes something the running release still reads will break it until the
@@ -324,12 +353,17 @@ database password is visible in `ps` to other local users of that machine. That
 is acceptable on a single-user machine; if it is not on yours, use a role
 whose password is in a `~/.pgpass` file and leave the password out of the URL.
 
-To restore, into an empty database:
+To restore, into an empty database, with `createdb` and `pg_restore` on `PATH`
+(prepend `PG_BIN_DIR` as above if they are not). The application's role cannot
+create databases, so run `createdb` as a Postgres superuser:
 
 ```bash
-createdb kraken_restored
+createdb --owner=kraken kraken_restored
 pg_restore --no-owner --no-privileges --dbname=postgres://kraken:<password>@127.0.0.1:5432/kraken_restored /srv/kraken/backups/kraken-<stamp>.dump
 ```
+
+A failed nightly backup is visible only in the backup unit's error log,
+`logs/backup.err.log`. Nothing alerts you, so check that file.
 
 Invoice PDFs are not in the dump: they live in `storage/`, so back that
 directory up as well.
@@ -353,10 +387,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kraken.app.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/kraken.backup.plist
 ```
 
-Set `KRAKEN_SERVICE=gui/<uid>/kraken.app`, where `<uid>` is the output of
+Set `KRAKEN_SERVICE=gui/501/kraken.app`, replacing 501 with the output of
 `id -u`. Nothing needs sudo, so `deploy.sh` runs end to end as that user. The
 catch: a LaunchAgent only runs while that user has a login session. The machine
 must log that user in automatically at boot, or nothing starts after a reboot.
+Automatic login is unavailable while FileVault is on, so with FileVault the
+app only starts once someone logs in as that user.
 
 **(b) A system LaunchDaemon.** Put the plists in `/Library/LaunchDaemons/`,
 owned by root, and load them with sudo:
@@ -368,9 +404,11 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/kraken.backup.plist
 
 Set `KRAKEN_SERVICE=system/kraken.app`. This starts at boot with nobody logged
 in. Add a `UserName` key to both plists, naming an unprivileged account (the
-examples use `kraken`), and make that account own all of `$KRAKEN_HOME`
-(`sudo chown -R kraken /srv/kraken`). Never run the app as root: a daemon with
-no `UserName` key does.
+examples use `kraken`). That account must exist before the first install and
+must own all of `$KRAKEN_HOME` (`sudo chown -R kraken /srv/kraken`), and the
+commands in the other steps, such as setting the operator password or taking a
+manual backup, are run as that account. Never run the app as root: a daemon
+with no `UserName` key does.
 
 ```xml
   <key>UserName</key>
@@ -379,13 +417,23 @@ no `UserName` key does.
 
 The cost is the restart step. `launchctl kickstart` on the `system` domain
 needs root, and `deploy.sh` has no way to elevate itself. Everything it writes
-must end up owned by `kraken`, so run it as that user
-(`sudo -u kraken /srv/kraken/repo/scripts/selfhost/deploy.sh`, with
-`KRAKEN_HOME` set). Then the build, migrations and the switch of `current`
-succeed, the final `kickstart` fails, and the script exits non-zero without
-restarting the app or pruning old releases. Restart the app yourself
-afterwards with `sudo launchctl kickstart -k system/kraken.app`. If you would
-rather the deploy be one command, use (a).
+must end up owned by `kraken`, so run it as that user:
+
+```bash
+sudo -H -u kraken env KRAKEN_HOME=/srv/kraken /srv/kraken/current/scripts/selfhost/deploy.sh
+```
+
+`sudo` resets the environment, which is why `KRAKEN_HOME` is passed through
+`env`, and `-H` sets `HOME` to the service user's home, so npm's cache goes
+there. `node`, `npm` and `git` must be on the `PATH` that `sudo` gives the
+command; if they are not, add `PATH=…` after `env` as well. The first deploy
+runs `repo/scripts/selfhost/deploy.sh` instead, as in [Deploying](#deploying).
+
+The build, migrations and the switch of `current` succeed, the restart fails,
+and the script prints the restart command, removes the old releases and exits
+non-zero. That happens on every deploy, the first one included. Restart the
+app yourself afterwards with `sudo launchctl kickstart -k system/kraken.app`.
+If you would rather the deploy be one command, use (a).
 
 The plists below are for (a). For (b), add the `UserName` key shown above and
 change nothing else.
