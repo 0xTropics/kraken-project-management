@@ -60,3 +60,6 @@ next-env.d.ts
 
 # Local tooling scratch. Never committed.
 /.superpowers/
+
+# Supabase CLI local state (contains project ref)
+supabase/.temp/
